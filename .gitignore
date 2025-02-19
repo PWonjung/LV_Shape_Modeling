@@ -1,2 +1,4 @@
 ipynb/MICCAI_LV/results/
 *.npy
+*/results/
+*events.out.tfevents*
