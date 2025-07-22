@@ -1,1 +1,1 @@
-This is official code for "LV-Net: A Robust Brain Lateral Ventricle Modeling Framework using Anatomy-Aware Deformable Joint Template Mesh"
+This is official code for "LV-Net: Anatomy-aware lateral ventricle shape modeling with application to Alzheimer’s Disease"
