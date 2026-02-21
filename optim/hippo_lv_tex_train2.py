@@ -168,9 +168,9 @@ def main(args):
         if epoch == 1000: 
             lda = [2, 2, 200, 10, 50, 1, 1]
             print(f"lda changed into: {lda}")
-            
+
         loss, log, lv_chamfer_loss = lv_hippo_tex_criterion2(verts, lv_target, hippo_target,tex1_target, tex2_target, tex3_target, lv_tri, hippo_tri, tri1, tri2, tri3, lda)
-        if epoch%1000 == 0 and epoch>=5000 and lv_chamfer_loss > 1:
+        if epoch%1000 == 0 and epoch>=5000 and epoch <=9000 and lv_chamfer_loss > 1:
             args.epoch+=1000
             print(lv_chamfer_loss) 
         loss += l2_loss * args.lda[-2]
