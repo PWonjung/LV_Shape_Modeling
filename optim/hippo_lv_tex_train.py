@@ -1,3 +1,4 @@
+
 """
 Modified code from https://github.com/yanx27/Pointnet_Pointnet2_pytorch/tree/master
 """
@@ -14,12 +15,12 @@ import logging
 import importlib
 import shutil
 import argparse
-
+import glob 
 from pathlib import Path
 from tqdm import tqdm
-from models.loss import  lvhippo_texloss as lvhippo_texloss
+from models.loss import lv_hippo_tex_criterion
 from torch.utils.data import DataLoader
-
+from pytorch3d.loss import mesh_laplacian_smoothing
 from models.pointnet import PointNetOpt
 from pytorch3d.structures import Meshes 
 from pytorch3d.ops import sample_points_from_meshes
@@ -34,100 +35,98 @@ def parse_args():
     '''PARAMETERS'''
     parser = argparse.ArgumentParser('training')
     parser.add_argument('--gpu', type=str, default='0', help='specify gpu device')
-    parser.add_argument('--epoch', default=5501, type=int, help='number of epoch in training')
-    parser.add_argument('--learning_rate', default=0.0001, type=float, help='learning rate in training')
-    parser.add_argument('--log_dir', type=str, default=None, help='experiment root')
+    parser.add_argument('--batch_size', type=int, default=1, help='batch size in training')
+    parser.add_argument('--epoch', default=10001, type=int, help='number of epoch in training')
+    parser.add_argument('--learning_rate', default=0.0005, type=float, help='learning rate in training')
+    parser.add_argument('--num_point', type=int, default=1024, help='Point Number')
     parser.add_argument('--data_path', type=str, default='../data/LV_left/train_data.pickle', help='data path to optimize')
-    parser.add_argument('--tag', default='tex', help='tex or point')
-    parser.add_argument('--cf', default=1, type=float, help='lamda value for cf')
-    parser.add_argument('--pm', default=1, type=float, help='lambda value for pm')
-    parser.add_argument('--edge', default=1, type=float, help='lambda value for edge')
-    parser.add_argument('--norm_con', default=1, type=float, help='lambda value for norm_con')
-    parser.add_argument('--lap', default=1, type=float, help='lambda value for lap')
-    parser.add_argument('--norm', default=1, type=float, help='lambda value for norm')
-    parser.add_argument('--l2', default=1, type=float, help='lambda value for l2')
+    parser.add_argument('--tag', default='manual', help='tex or point')
+    parser.add_argument('--sub_id', default= '', help='LBC subject id')
+    parser.add_argument('--lda', type=float, nargs='+', default= [3,0.5,1500,5,1,1,1], help='LBC subject id')
 
     return parser.parse_args()
+
+def train_data(data_file, tag=None, id=None):
+    temp_data_file = "/root/LV/LV_Shape_Modeling/temp_meshes/cuttail_temp_L_tex1.pkl"
+    
+    with open(temp_data_file, "rb") as f:
+        temp_data = pickle.load(f)
+    with open(data_file, "rb") as f:
+        data = pickle.load(f)
+    print("@@@@@!!",id)
+    # print(glob.glob(f"/root/LV/LV_Shape_Modeling/ipynb/MICCAI-LV/results/aibl_normal_mid1/out/{id}/2000_*.npy"))
+    # scaler = np.load(glob.glob(f"/root/LV/LV_Shape_Modeling/ipynb/MICCAI-LV/results/aibl_normal_mid1/out/{id}/2000_*.npy")[0])
+    # print(scaler)
+ 
+    # Convert vertices and faces to tensors and move to GPU
+    vert = np.asarray(data['vert']).astype(np.float32)
+    lv_tri = np.asarray(temp_data['cuttail_lv']).astype(np.float32)
+    hippo_tri = np.asarray(temp_data['cuttail_hippo']).astype(np.float32)
+    tri1 = np.asarray(temp_data['tri1']).astype(np.float32)#thalamus
+    tri2 = np.asarray(temp_data['tri2']).astype(np.float32)#caudate
+    tri3 = np.asarray(temp_data['tri3']).astype(np.float32)#oppositeLV
+    
+    lv_pt = np.asarray(data['lv']).astype(np.float32)
+    hippo_pt = np.asarray(data['hippo']).astype(np.float32)
+    tex1_pt = np.asarray(data['tex1']).astype(np.float32)
+    tex2_pt = np.asarray(data['tex2']).astype(np.float32)
+    tex3_pt = np.asarray(data['tex3']).astype(np.float32)
+    print(lv_pt.shape,"!!!!!!!!!!!!")
+    # # move to origin
+
+    # hippo_pt[:,0] -= lv_pt[:,0].min()
+    # vert[:,0] = vert[:,0] - vert[:,0].min()
+    # lv_pt[:,0] -= lv_pt[:,0].min()
+    
+    # hippo_pt[:,1] -= lv_pt[:,1].max()
+    # vert[:,1] = vert[:,1] - vert[:,1].max()
+    # lv_pt[:,1] -= lv_pt[:,1].max()
+    
+    # tgt_vert= np.concatenate((lv_pt, hippo_pt), axis=0)
+    # hippo_pt[:,2] = hippo_pt[:,2] - (tgt_vert[:,2].max()+tgt_vert[:,2].min())/2
+    # lv_pt[:,2] = lv_pt[:,2] - (tgt_vert[:,2].max()+tgt_vert[:,2].min())/2
+    # vert[:,2] = vert[:,2] - (vert[:,2].max()+vert[:,2].min())/2
+    
+    # vert = vert * scaler[0,0,:]
+    vertices = torch.from_numpy(vert[np.newaxis, :, :]).cuda()
+    lv_tri = torch.from_numpy(lv_tri[np.newaxis, :, :]).cuda()
+    hippo_tri = torch.from_numpy(hippo_tri[np.newaxis, :, :]).cuda()
+    tri1 = torch.from_numpy(tri1[np.newaxis, :, :]).cuda()
+    tri2 = torch.from_numpy(tri2[np.newaxis, :, :]).cuda()
+    tri3 = torch.from_numpy(tri3[np.newaxis, :, :]).cuda()
+
+
+    lv_target = torch.from_numpy(lv_pt[np.newaxis, :, :]).cuda()
+    hippo_target = torch.from_numpy(hippo_pt[np.newaxis, :, :]).cuda()
+    
+    tex1_target = torch.from_numpy(tex1_pt[np.newaxis, :, :]).cuda()
+    tex2_target = torch.from_numpy(tex2_pt[np.newaxis, :, :]).cuda()
+    tex3_target = torch.from_numpy(tex3_pt[np.newaxis, :, :]).cuda()
+    
+    lv_pred_mesh = Meshes(verts=list(vertices), faces=list(lv_tri))
+    hippo_pred_mesh = Meshes(verts=list(vertices), faces=list(hippo_tri))   
+    
+    print(mesh_laplacian_smoothing(lv_pred_mesh), mesh_laplacian_smoothing(hippo_pred_mesh), "BASIC LOSS")
+    return vertices, lv_tri, hippo_tri,  lv_target, hippo_target, tex1_target, tex2_target, tex3_target, lv_pred_mesh, hippo_pred_mesh, tri1, tri2, tri3
 def create_directory(directory_path, log=False):
-    try:
+    if not os.path.exists(directory_path):
         # Create target Directory
         os.mkdir(directory_path)
         print(f"Directory '{directory_path}' created successfully.")
-    except FileExistsError:
-        print(f"Directory '{directory_path}' already exists.")
-        if log:
-            raise IOError(f"The file '{directory_path}' exists.")
-        else:
-            pass
-def train_data(data_file):
-    with open(data_file, "rb") as f:
-        data = pickle.load(f)
-    
-    def to_torch(data, key, dtype = np.float32):
-        return torch.from_numpy(np.asarray(data[key]).astype(dtype)[np.newaxis, :, :]).cuda()
-    
-    # Convert vertices and faces to tensors and move to GPU
-    vertices = to_torch(data,'vertices', np.float32)
-    lv_faces = to_torch(data,'lv_faces', np.int32)
-    hippo_faces = to_torch(data,'hippo_faces', np.int32)
-    tri1_faces = to_torch(data,'tri1_faces', np.int32)
-    tri2_faces = to_torch(data,'tri2_faces', np.int32)
-    tri3_faces = to_torch(data,'tri3_faces', np.int32)
-    tri4_faces = to_torch(data,'tri4_faces', np.int32)
-    tri5_faces = to_torch(data,'tri5_faces', np.int32)
-    
-    target_lv = to_torch(data,'target_lv', np.float32)
-    target1 = to_torch(data,'target1', np.float32) # thalamus
-    target2 = to_torch(data,'target2', np.float32) # caudate
-    target3 = to_torch(data,'target3', np.float32) # opposite lv
-    target4 = to_torch(data,'target4', np.float32) # hippocampus
-    target5 = to_torch(data,'target5', np.float32) # the other
-    tri = [tri1_faces, tri2_faces, tri3_faces, tri4_faces, tri5_faces]
-    target = [target1, target2, target3, target4, target5]
-    return vertices, lv_faces, hippo_faces, tri, target, target_lv
+    else: 
+        print(f"{directory_path} already exists")
 
 def main(args):
-    writer = SummaryWriter(log_dir=f"./log/{args.log_dir}")
-
-    def log_string(str):
-        logger.info(str)
-        print(str)
- 
-    '''HYPER PARAMETER'''
-    os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
-
-    '''CREATE DIR'''
-    timestr = str(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M'))
-    exp_dir = Path('./log/')
-    exp_dir.mkdir(exist_ok=True)
-    create_directory(rf'C:\Users\v1wpark\Documents\Projects\lv-parametric-modelling\voxel2mesh\out\{args.tag}')
-
-    create_directory(rf'C:\Users\v1wpark\Documents\Projects\lv-parametric-modelling\voxel2mesh\log\{args.tag}')
-
-    if args.log_dir is None:
-        exp_dir = exp_dir.joinpath(timestr)
-    else:
-        exp_dir = exp_dir.joinpath(args.log_dir)
-    exp_dir.mkdir(exist_ok=True)
-    checkpoints_dir = exp_dir.joinpath('checkpoints/')
-    checkpoints_dir.mkdir(exist_ok=True)
-    log_dir = exp_dir.joinpath('logs/')
-    log_dir.mkdir(exist_ok=True)
-
     '''LOG'''
     args = parse_args()
-    logger = logging.getLogger("Model")
-    logger.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    writer = SummaryWriter(log_dir=rf'C:\Users\v1wpark\Documents\Projects\lv-parametric-modelling\voxel2mesh\log\{args.tag}')
-    file_handler = logging.FileHandler('%s/%s.txt' % (log_dir, args.model))
-    file_handler.setLevel(logging.INFO)
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
-    log_string('PARAMETER ...')
-    log_string(args)
-    lda = {}
-    lda['cf'], lda['pm'], lda['edge'], lda['norm_con'], lda['lap'], lda['norm'], lda['l2'] = args.cf, args.pm, args.edge, args.norm_con, args.lap, args.norm, args.l2
+    print(args)
+    os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
+    batch_size = args.batch_size
+    print(args.sub_id,"!!!!!")
+
+    create_directory(f"/root/LV/LV_Shape_Modeling/ipynb/MICCAI-LV/results/{args.tag}/log/{args.sub_id}", True)
+    writer = SummaryWriter(log_dir=f"/root/LV/LV_Shape_Modeling/ipynb/MICCAI-LV/results/{args.tag}/log/{args.sub_id}")
+    
     '''MODEL LOADING'''
     model = PointNetOpt(num_classes=3, input_transform=False, feature_transform=False).to("cuda")
 
@@ -138,76 +137,98 @@ def main(args):
         eps=1e-08,
     )
 
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.epoch//4, gamma=0.5)
-    global_epoch = 0
-    global_step = 0
-
-    '''TRANING'''
-    logger.info('Start training...')
-    #torch.autograd.set_detect_anomaly(True)
-    model.train()
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.epoch//5, gamma=0.5)
     loss_fn = nn.MSELoss()
-
+    
+    global_step = 0
+    '''TRANING'''
+    print('Start training...')
+    model.train()
     # data preparation
-    vertices, lv_faces, hippo_faces, tri, target, target_lv = train_data(args.data_path)
+    vertices, lv_tri, hippo_tri,  lv_target, hippo_target, tex1_target, tex2_target, tex3_target, lv_pred_mesh, hippo_pred_mesh, tri1, tri2, tri3 = train_data(args.data_path, args.tag, id = args.sub_id)
     # Convert vertices and faces to tensors and move to GPU
     orig_vertices = vertices.clone()
+    lv_orig_norm = lv_pred_mesh.verts_normals_packed().clone()
+    hippo_orig_norm = hippo_pred_mesh.verts_normals_packed().clone()
 
-    lv_pred_mesh = Meshes(verts=list(vertices), faces=list(lv_faces))
-    hippo_pred_mesh = Meshes(verts=list(vertices), faces=list(hippo_faces))
-
-    orig_lv_norm = lv_pred_mesh.verts_normals_packed().clone()
-    orig_hippo_norm = hippo_pred_mesh.verts_normals_packed().clone()
-    pred_mesh = Meshes(verts=list(vertices), faces=list(lv_faces))
-
+    print(f"lambda is following. \n 1. pm: {args.lda[0]}\n 2. cf {args.lda[1]}\n 3. edge {args.lda[2]}\n 4. lap {args.lda[3]}\n 5. norm_con {args.lda[4]}\n 6. l2_vert {args.lda[5]}\n 7.l2_norm {args.lda[6]}")
     # Optimization loop
-    print(f"{vertices.shape=}")
-    for epoch in range(args.epoch):
+    loss_min = 10000
+    #1 3 2000 500 100 1 1
+    # lda = [3,0.5,500,200,20,0.5,0.5]
+    lda = [3,0.5,50,20,10,0.05,0.05]
+    lda = [2,2, 20, 25,5,0.005, 2.5] #again3
+    # lda = [3,0.5,0,0,0,0,0]
+    # lda = args.lda
+    # lda = np.asarray(args.lda)
+    saved_vert = orig_vertices
+    for epoch in tqdm(range(args.epoch)):
 
         optimizer.zero_grad()
 
-        vertices = pred_mesh.verts_list()[0].unsqueeze(0)
+        vertices = lv_pred_mesh.verts_list()[0].unsqueeze(0)
 
         # Forward pass
         pred = model(vertices)
-
+        
         # Avoid inplace operations by creating new tensors
         verts = vertices.clone() + pred.transpose(2, 1).clone()
         l2_loss = loss_fn(orig_vertices, verts)
-        loss, log = lvhippo_texloss(verts, lv_faces, hippo_faces, tri, target, target_lv, epoch)
-        loss += l2_loss * 1.5
+
+        
+        if epoch<1000:
+            # print(lda)
+            loss, log = lv_hippo_tex_criterion(verts, lv_target, hippo_target,tex1_target, tex2_target, tex3_target, lv_tri, hippo_tri, tri1, tri2, tri3, args.lda)
+        else:
+            loss, log = lv_hippo_tex_criterion(verts, lv_target, hippo_target,tex1_target, tex2_target, tex3_target, lv_tri, hippo_tri, tri1, tri2, tri3, lda)
+        loss += l2_loss * args.lda[-2]
+        
+        mid_lv_pred_mesh = Meshes(verts=list(verts), faces=list(lv_tri))
+        mid_lv_norm = mid_lv_pred_mesh.verts_normals_packed()
+        l2_lv_norm_loss = loss_fn(lv_orig_norm, mid_lv_norm)
+        mid_hippo_pred_mesh = Meshes(verts=list(verts), faces=list(hippo_tri))
+        mid_hippo_norm = mid_hippo_pred_mesh.verts_normals_packed()
+        l2_hippo_norm_loss = loss_fn(hippo_orig_norm, mid_hippo_norm)
+        loss += (l2_hippo_norm_loss+l2_lv_norm_loss) * args.lda[-1] 
+
+        # if epoch%1000 == 0 and epoch>0:
+        #     if log['point_mesh_dist_loss']>1:
+        #         lda[2:] /= 5
+        #         print("lda changed !!",lda)
         # Backward pass
-        lv_pred_mesh = Meshes(verts=list(verts), faces=list(lv_faces))
-        hippo_pred_mesh = Meshes(verts=list(verts), faces=list(hippo_faces))
-        lv_norm = lv_pred_mesh.verts_normals_packed()
-        hippo_norm = hippo_pred_mesh.verts_normals_packed()
-        # print(f"{torch.sum(lv_pred_mesh.verts_normals_packed()!=0.0)=}")
-
-        l2_lv_norm_loss = loss_fn(orig_lv_norm, lv_norm)
-        l2_hippo_norm_loss = loss_fn(orig_hippo_norm, hippo_norm)
-        loss+=(l2_lv_norm_loss+l2_hippo_norm_loss)* 15
-
         loss.backward()
         optimizer.step()
         scheduler.step()
-        global_step += 1
         
-        log['l2 loss'] =l2_loss
-        log['lv norm loss'] =l2_lv_norm_loss
-        log['hippo norm loss'] = l2_hippo_norm_loss
-        if epoch % 30 == 0 :
-            print(epoch, log)
+        global_step += 1
+        log['l2 loss'] = l2_loss
+        log['l2 lv norm loss'] = l2_lv_norm_loss
+        log['l2 hippo norm loss'] = l2_hippo_norm_loss
+
+        # if loss < loss_min:
+        #     loss_min = loss
+        #     saved_vert = verts
+        if log['point_mesh_dist_loss'] < loss_min:
+            loss_min=log['point_mesh_dist_loss']
+            saved_vert = verts
+
+        if epoch % 100 == 0 : print(epoch, log)
         
         for key in log.keys():
             writer.add_scalar(key, log[key], global_step=epoch)
 
         writer.add_scalar("lr", optimizer.param_groups[0]['lr'], global_step=epoch)
-        if epoch % 500 == 0 :
+        if epoch % 500 == 0 or epoch == args.epoch-1:
             verts_np = verts.detach().cpu().numpy()
-            np.save(rf'C:\Users\v1wpark\Documents\Projects\lv-parametric-modelling\voxel2mesh\out\{args.tag}\{args.tag}_{epoch}_loss{loss.detach().cpu().item()}.npy', verts_np)
-            
-    logger.info('End of training...')
+            create_directory(rf'/root/LV/LV_Shape_Modeling/ipynb/MICCAI-LV/results/{args.tag}/out/{args.sub_id}')
+            np.save(rf'/root/LV/LV_Shape_Modeling/ipynb/MICCAI-LV/results/{args.tag}/out/{args.sub_id}/{epoch}_{args.sub_id}_{loss}.npy', verts_np)
+            np.save(rf'/root/LV/LV_Shape_Modeling/ipynb/MICCAI-LV/results/{args.tag}/out/{args.sub_id}/small_{epoch}_{args.sub_id}_{loss_min}.npy', saved_vert.detach().cpu().numpy())
+            if epoch>5000 and loss_min<1.0: break
+    np.save(rf'/root/LV/LV_Shape_Modeling/ipynb/MICCAI-LV/results/{args.tag}/out/{args.sub_id}/smallest_{args.sub_id}_{loss_min}.npy', saved_vert.detach().cpu().numpy())
+    print('End of training...')
+    return
 
 if __name__ == '__main__':
     args = parse_args()
     main(args)
+    

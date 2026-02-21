@@ -5,9 +5,9 @@ import glob
 import shutil
 import time
 
-label = 'run_mid_TRS3_lvamp'
+label = 'oasis_normal_tex_4'
 def process_input(data_path, sub_id):
-    command = f"python ../../voxel2mesh/hippo_lv_train2.py --data_path {data_path} --tag {label}  --learning_rate 0.0005 --sub_id {sub_id} --gpu 2 --lda 2 2 1500 500 100 1 1"
+    command = f"python ../../optim/hippo_lv_tex_train.py --data_path {data_path} --tag {label}  --learning_rate 0.0005 --sub_id {sub_id} --gpu 2 --lda 2 2 50 10 10 1 1"
     # pm, cf, edge, lap, norm_con, l2_vert, l2_norm
     
     print(command)
@@ -15,7 +15,7 @@ def process_input(data_path, sub_id):
     subprocess.run(command, shell=True)
 def main():
 
-    filelist = glob.glob(f"/root/LV/LV/2502LV/pcd_scaled/L/notail/*.pkl")
+    filelist = glob.glob(f"/root/LV/LV/2502LV/OASIS/normal_mid_tgt/*.pkl")
     filelist = filelist
     print(filelist)
     # print(filelist)python
@@ -37,7 +37,7 @@ def main():
         for fold in folders:
             sub_id = fold.split("/")[-1].split("_")[1]
             data_path = rf"{fold}"
-            exist5000 = glob.glob(f"/root/LV/lv-parametric-modelling/ipynb/MICCAI-LV/results/{label}/out/{sub_id}/5000*.npy")
+            exist5000 = glob.glob(f"/root/LV/LV_Shape_Modeling/ipynb/MICCAI-LV/results/{label}/out/{sub_id}/smallest*.npy")
 
             if exist5000==[]:
             # print(f"{sub_id=}")

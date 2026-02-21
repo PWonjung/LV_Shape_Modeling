@@ -47,40 +47,40 @@ def parse_args():
     return parser.parse_args()
 
 def train_data(data_file, tag=None, id=None):
-    temp_data_file = "/root/LV/LV/2502LV/cuttail_temp.pkl"
+    temp_data_file = "/root/LV/LV_Shape_Modeling/temp_meshes/cuttail_temp_L.pkl"
     
     with open(temp_data_file, "rb") as f:
         temp_data = pickle.load(f)
     with open(data_file, "rb") as f:
         data = pickle.load(f)
     print("@@@@@!!",id)
-    print(glob.glob(f"/root/LV/lv-parametric-modelling/ipynb/MICCAI-LV/results/mid_TRS3/out/{id}/2000_*.npy"))
-    scaler = np.load(glob.glob(f"/root/LV/lv-parametric-modelling/ipynb/MICCAI-LV/results/mid_TRS3/out/{id}/2000_*.npy")[0])
-    print(scaler)
+    # print(glob.glob(f"/root/LV/LV_Shape_Modeling/ipynb/MICCAI-LV/results/aibl_normal_mid1/out/{id}/2000_*.npy"))
+    # scaler = np.load(glob.glob(f"/root/LV/LV_Shape_Modeling/ipynb/MICCAI-LV/results/aibl_normal_mid1/out/{id}/2000_*.npy")[0])
+    # print(scaler)
  
     # Convert vertices and faces to tensors and move to GPU
     vert = np.asarray(data['vert']).astype(np.float32)
-    lv_tri = np.asarray(temp_data['lv']).astype(np.float32)
-    hippo_tri = np.asarray(temp_data['hippo']).astype(np.float32)
+    lv_tri = np.asarray(temp_data['cuttail_lv']).astype(np.float32)
+    hippo_tri = np.asarray(temp_data['cuttail_hippo']).astype(np.float32)
     lv_pt = np.asarray(data['lv']).astype(np.float32)
     hippo_pt = np.asarray(data['hippo']).astype(np.float32)
 
-    # move to origin
+    # # move to origin
 
-    hippo_pt[:,0] -= lv_pt[:,0].min()
-    vert[:,0] = vert[:,0] - vert[:,0].min()
-    lv_pt[:,0] -= lv_pt[:,0].min()
+    # hippo_pt[:,0] -= lv_pt[:,0].min()
+    # vert[:,0] = vert[:,0] - vert[:,0].min()
+    # lv_pt[:,0] -= lv_pt[:,0].min()
     
-    hippo_pt[:,1] -= lv_pt[:,1].max()
-    vert[:,1] = vert[:,1] - vert[:,1].max()
-    lv_pt[:,1] -= lv_pt[:,1].max()
+    # hippo_pt[:,1] -= lv_pt[:,1].max()
+    # vert[:,1] = vert[:,1] - vert[:,1].max()
+    # lv_pt[:,1] -= lv_pt[:,1].max()
     
-    tgt_vert= np.concatenate((lv_pt, hippo_pt), axis=0)
-    hippo_pt[:,2] = hippo_pt[:,2] - (tgt_vert[:,2].max()+tgt_vert[:,2].min())/2
-    lv_pt[:,2] = lv_pt[:,2] - (tgt_vert[:,2].max()+tgt_vert[:,2].min())/2
-    vert[:,2] = vert[:,2] - (vert[:,2].max()+vert[:,2].min())/2
+    # tgt_vert= np.concatenate((lv_pt, hippo_pt), axis=0)
+    # hippo_pt[:,2] = hippo_pt[:,2] - (tgt_vert[:,2].max()+tgt_vert[:,2].min())/2
+    # lv_pt[:,2] = lv_pt[:,2] - (tgt_vert[:,2].max()+tgt_vert[:,2].min())/2
+    # vert[:,2] = vert[:,2] - (vert[:,2].max()+vert[:,2].min())/2
     
-    vert = vert * scaler[0,0,:]
+    # vert = vert * scaler[0,0,:]
     vertices = torch.from_numpy(vert[np.newaxis, :, :]).cuda()
     lv_tri = torch.from_numpy(lv_tri[np.newaxis, :, :]).cuda()
     hippo_tri = torch.from_numpy(hippo_tri[np.newaxis, :, :]).cuda()
@@ -108,8 +108,8 @@ def main(args):
     batch_size = args.batch_size
     print(args.sub_id,"!!!!!")
 
-    create_directory(f"/root/LV/lv-parametric-modelling/ipynb/MICCAI-LV/results/{args.tag}/log/{args.sub_id}", True)
-    writer = SummaryWriter(log_dir=f"/root/LV/lv-parametric-modelling/ipynb/MICCAI-LV/results/{args.tag}/log/{args.sub_id}")
+    create_directory(f"/root/LV/LV_Shape_Modeling/ipynb/MICCAI-LV/results/{args.tag}/log/{args.sub_id}", True)
+    writer = SummaryWriter(log_dir=f"/root/LV/LV_Shape_Modeling/ipynb/MICCAI-LV/results/{args.tag}/log/{args.sub_id}")
     
     '''MODEL LOADING'''
     model = PointNetOpt(num_classes=3, input_transform=False, feature_transform=False).to("cuda")
@@ -185,9 +185,9 @@ def main(args):
         writer.add_scalar("lr", optimizer.param_groups[0]['lr'], global_step=epoch)
         if epoch % 500 == 0 or epoch == args.epoch-1:
             verts_np = verts.detach().cpu().numpy()
-            create_directory(rf'/root/LV/lv-parametric-modelling/ipynb/MICCAI-LV/results/{args.tag}/out/{args.sub_id}')
-            np.save(rf'/root/LV/lv-parametric-modelling/ipynb/MICCAI-LV/results/{args.tag}/out/{args.sub_id}/{epoch}_{args.sub_id}_{loss}.npy', verts_np)
-    np.save(rf'/root/LV/lv-parametric-modelling/ipynb/MICCAI-LV/results/{args.tag}/out/{args.sub_id}/smallest_{args.sub_id}_{loss_min}.npy', saved_vert.detach().cpu().numpy())
+            create_directory(rf'/root/LV/LV_Shape_Modeling/ipynb/MICCAI-LV/results/{args.tag}/out/{args.sub_id}')
+            np.save(rf'/root/LV/LV_Shape_Modeling/ipynb/MICCAI-LV/results/{args.tag}/out/{args.sub_id}/{epoch}_{args.sub_id}_{loss}.npy', verts_np)
+    np.save(rf'/root/LV/LV_Shape_Modeling/ipynb/MICCAI-LV/results/{args.tag}/out/{args.sub_id}/smallest_{args.sub_id}_{loss_min}.npy', saved_vert.detach().cpu().numpy())
     print('End of training...')
     return
 

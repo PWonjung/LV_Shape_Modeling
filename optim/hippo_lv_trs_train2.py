@@ -48,10 +48,11 @@ def parse_args():
     return parser.parse_args()
 
 def train_data(data_file, tag=None, id=None):
-    temp_data_file = "/root/LV/LV/2502LV/cuttail_temp.pkl"
+    temp_data_file = "/root/LV/LV_Shape_Modeling/temp_meshes/cuttail_temp_L.pkl"
     
     with open(temp_data_file, "rb") as f:
         temp_data = pickle.load(f)
+        print(temp_data.keys())
     with open(data_file, "rb") as f:
         data = pickle.load(f)
     print("@@@@@!!",id)
@@ -60,9 +61,9 @@ def train_data(data_file, tag=None, id=None):
     # print(scaler)
  
     # Convert vertices and faces to tensors and move to GPU
-    vert = np.asarray(data['vert']).astype(np.float32)
-    lv_tri = np.asarray(temp_data['lv']).astype(np.float32)
-    hippo_tri = np.asarray(temp_data['hippo']).astype(np.float32)
+    vert = np.asarray(temp_data['cuttail_vert']).astype(np.float32)
+    lv_tri = np.asarray(temp_data['cuttail_lv']).astype(np.float32)
+    hippo_tri = np.asarray(temp_data['cuttail_hippo']).astype(np.float32)
     lv_pt = np.asarray(data['lv']).astype(np.float32)
     hippo_pt = np.asarray(data['hippo']).astype(np.float32)
 
@@ -107,8 +108,8 @@ def main(args):
     batch_size = args.batch_size
     print(args.sub_id,"!!!!!")
 
-    create_directory(f"/root/LV/lv-parametric-modelling/ipynb/MICCAI-LV/results/{args.tag}/log/{args.sub_id}", True)
-    writer = SummaryWriter(log_dir=f"/root/LV/lv-parametric-modelling/ipynb/MICCAI-LV/results/{args.tag}/log/{args.sub_id}")
+    create_directory(f"/root/LV/LV_Shape_Modeling/ipynb/MICCAI-LV/results/{args.tag}/log/{args.sub_id}", True)
+    writer = SummaryWriter(log_dir=f"/root/LV/LV_Shape_Modeling/ipynb/MICCAI-LV/results/{args.tag}/log/{args.sub_id}")
     
     '''MODEL LOADING'''
     
@@ -152,8 +153,8 @@ def main(args):
 
         # Forward pass
         pred = model(vertices)
-        print(vertices.shape, pred.shape, "!!") #torch.Size([1, 2826, 3]) torch.Size([1, 9])
-        print(pred, vertices[0,0])
+        # print(vertices.shape, pred.shape, "!!") #torch.Size([1, 2826, 3]) torch.Size([1, 9])
+        # print(pred, vertices[0,0])
         verts = vertices.clone() * (pred.unsqueeze(1))
         # verts[0] += pred[0,3:6]
         # print(pred, verts[0,0])
@@ -189,8 +190,8 @@ def main(args):
 
         writer.add_scalar("lr", optimizer.param_groups[0]['lr'], global_step=epoch)
         if epoch % 1000 == 0 or epoch == args.epoch-1:
-            create_directory(rf'/root/LV/lv-parametric-modelling/ipynb/MICCAI-LV/results/{args.tag}/out/{args.sub_id}')
-            np.save(rf'/root/LV/lv-parametric-modelling/ipynb/MICCAI-LV/results/{args.tag}/out/{args.sub_id}/{epoch}_{args.sub_id}_{loss}.npy', saved.detach().cpu().numpy())
+            create_directory(rf'/root/LV/LV_Shape_Modeling/ipynb/MICCAI-LV/results/{args.tag}/out/{args.sub_id}')
+            np.save(rf'/root/LV/LV_Shape_Modeling/ipynb/MICCAI-LV/results/{args.tag}/out/{args.sub_id}/{epoch}_{args.sub_id}_{loss}.npy', saved.detach().cpu().numpy())
             # verts_np = verts.detach().cpu().numpy()
             # np.save(rf'/root/LV/lv-parametric-modelling/ipynb/MICCAI-LV/results/{args.tag}/out/{args.sub_id}/{epoch}_{args.sub_id}_{loss}.npy', verts_np)
 

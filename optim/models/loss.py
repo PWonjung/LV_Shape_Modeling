@@ -6,7 +6,7 @@ from pytorch3d.ops import sample_points_from_meshes
 # Loss functions
 from pytorch3d.loss import (chamfer_distance, mesh_laplacian_smoothing, mesh_normal_consistency, point_mesh_face_distance)
 from models.edge_variance import mesh_edge_var_loss
-from models.point_mesh_loss import point_mesh_face_distance
+from models.point_mesh_face_distance import point_mesh_face_distance
 
 from collections import Counter
 
@@ -81,6 +81,196 @@ def lv_hippo_criterion(verts, lv_target, hippo_target, lv_tri, hippo_tri, lda=[3
     log = {"loss": loss,
         "point_mesh_dist_loss": lv_point_mesh_dist_loss.detach()+ hippo_point_mesh_dist_loss.detach(),
         "chamfer_loss": lv_chamfer_loss.detach()+lv_chamfer_loss.detach(),
+        "edge_loss": lv_edge_loss.detach()+hippo_edge_loss.detach(),
+        "laplacian_loss": lv_laplacian_loss.detach()+hippo_laplacian_loss.detach(),
+        "normal_consistency_loss": lv_normal_consistency_loss.detach()+hippo_normal_consistency_loss.detach()
+        }
+    
+    return loss, log
+
+
+def lv_hippo_tex_criterion(verts, lv_target, hippo_target,tex1_target, tex2_target, tex3_target, lv_tri, hippo_tri, tri1, tri2, tri3, lda=[3,0.5,1500,5,1,1,1]):
+    loss=0.0
+    # cf loss
+    pred_lv_mesh = Meshes(verts=list(verts), faces=list(lv_tri))
+    pred_lv_points = sample_points_from_meshes(pred_lv_mesh, lv_target.shape[1])
+    lv_chamfer_loss =  chamfer_distance(pred_lv_points, lv_target)[0]
+    pred_hippo_mesh = Meshes(verts=list(verts), faces=list(hippo_tri)) 
+    pred_hippo_points = sample_points_from_meshes(pred_hippo_mesh, hippo_target.shape[1])
+    hippo_chamfer_loss =  chamfer_distance(pred_hippo_points, hippo_target)[0]
+    
+    pred_tri1_mesh = Meshes(verts=list(verts), faces=list(tri1))
+    pred_tri2_mesh = Meshes(verts=list(verts), faces=list(tri2))
+    pred_tri3_mesh = Meshes(verts=list(verts), faces=list(tri3))
+    
+    tex1_pointclouds = Pointclouds(points=tex1_target)
+    tex2_pointclouds = Pointclouds(points=tex2_target)
+    tex3_pointclouds = Pointclouds(points=tex3_target)
+    tex1_point_mesh_dist_loss = point_mesh_face_distance(pred_tri1_mesh, tex1_pointclouds)
+    tex2_point_mesh_dist_loss = point_mesh_face_distance(pred_tri2_mesh, tex2_pointclouds)
+    tex3_point_mesh_dist_loss = point_mesh_face_distance(pred_tri3_mesh, tex3_pointclouds)
+
+    pred_tri1_points = sample_points_from_meshes(pred_tri1_mesh, tex1_target.shape[1])
+    pred_tri2_points = sample_points_from_meshes(pred_tri2_mesh, tex2_target.shape[1])
+    pred_tri3_points = sample_points_from_meshes(pred_tri3_mesh, tex3_target.shape[1])
+    tri1_chamfer_loss =  chamfer_distance(pred_tri1_points, tex1_target)[0]
+    tri2_chamfer_loss =  chamfer_distance(pred_tri2_points, tex2_target)[0]
+    tri3_chamfer_loss =  chamfer_distance(pred_tri3_points, tex3_target)[0]
+    
+    # point-mesh loss
+    lv_pointclouds = Pointclouds(points=lv_target)
+    lv_point_mesh_dist_loss = point_mesh_face_distance(pred_lv_mesh, lv_pointclouds)
+    hippo_pointclouds = Pointclouds(points=hippo_target)
+    hippo_point_mesh_dist_loss = point_mesh_face_distance(pred_hippo_mesh, hippo_pointclouds)
+
+    # Regularization loss
+    lv_edge_loss = mesh_edge_var_loss(pred_lv_mesh)
+    hippo_edge_loss = mesh_edge_var_loss(pred_hippo_mesh)
+    lv_laplacian_loss =  mesh_laplacian_smoothing(pred_lv_mesh, method="cotcurv")
+    hippo_laplacian_loss =  mesh_laplacian_smoothing(pred_hippo_mesh, method="cotcurv")
+    lv_normal_consistency_loss = mesh_normal_consistency(pred_lv_mesh)
+    hippo_normal_consistency_loss = mesh_normal_consistency(pred_hippo_mesh)
+    
+    
+    loss =  lda[0]*  (lv_point_mesh_dist_loss + hippo_point_mesh_dist_loss)\
+    + lda[1] * (tri1_chamfer_loss+tri2_chamfer_loss+tri3_chamfer_loss)/3\
+    + lda[2] * (lv_edge_loss + hippo_edge_loss)\
+    + lda[3] * (lv_laplacian_loss+hippo_laplacian_loss)\
+    + lda[4] * (lv_normal_consistency_loss+hippo_normal_consistency_loss)\
+    # + lda[0] * (tex1_point_mesh_dist_loss + tex2_point_mesh_dist_loss + tex3_point_mesh_dist_loss)/3\
+    # print(lv_laplacian_loss, hippo_laplacian_loss)
+    # print(lv_normal_consistency_loss, hippo_normal_consistency_loss)
+    
+
+    log = {"loss": loss,
+        "point_mesh_dist_loss": lv_point_mesh_dist_loss.detach()+ hippo_point_mesh_dist_loss.detach(),
+        "chamfer_loss": lv_chamfer_loss.detach()+lv_chamfer_loss.detach(),
+        "tri_point_mesh_dist_loss": tex1_point_mesh_dist_loss.detach()+tex2_point_mesh_dist_loss.detach()+tex3_point_mesh_dist_loss.detach(),
+        "tri_chamfer_loss": tri1_chamfer_loss.detach()+tri2_chamfer_loss.detach()+tri3_chamfer_loss.detach(),
+        "edge_loss": lv_edge_loss.detach()+hippo_edge_loss.detach(),
+        "laplacian_loss": lv_laplacian_loss.detach()+hippo_laplacian_loss.detach(),
+        "normal_consistency_loss": lv_normal_consistency_loss.detach()+hippo_normal_consistency_loss.detach()
+        }
+
+    return loss, log
+
+
+def lv_tex_criterion(verts, lv_target, hippo_target,tex1_target, tex2_target, tex3_target, lv_tri, hippo_tri, tri1, tri2, tri3, lda=[3,0.5,1500,5,1,1,1]):
+    loss=0.0
+
+    # cf loss
+    pred_lv_mesh = Meshes(verts=list(verts), faces=list(lv_tri))
+    pred_lv_points = sample_points_from_meshes(pred_lv_mesh, lv_target.shape[1])
+    lv_chamfer_loss =  chamfer_distance(pred_lv_points, lv_target)[0]
+    
+    pred_tri1_mesh = Meshes(verts=list(verts), faces=list(tri1))
+    pred_tri2_mesh = Meshes(verts=list(verts), faces=list(tri2))
+    pred_tri3_mesh = Meshes(verts=list(verts), faces=list(tri3))
+    
+    tex1_pointclouds = Pointclouds(points=tex1_target)
+    tex2_pointclouds = Pointclouds(points=tex2_target)
+    tex3_pointclouds = Pointclouds(points=tex3_target)
+    tex1_point_mesh_dist_loss = point_mesh_face_distance(pred_tri1_mesh, tex1_pointclouds)
+    tex2_point_mesh_dist_loss = point_mesh_face_distance(pred_tri2_mesh, tex2_pointclouds)
+    tex3_point_mesh_dist_loss = point_mesh_face_distance(pred_tri3_mesh, tex3_pointclouds)
+
+    pred_tri1_points = sample_points_from_meshes(pred_tri1_mesh, tex1_target.shape[1])
+    pred_tri2_points = sample_points_from_meshes(pred_tri2_mesh, tex2_target.shape[1])
+    pred_tri3_points = sample_points_from_meshes(pred_tri3_mesh, tex3_target.shape[1])
+    tri1_chamfer_loss =  chamfer_distance(pred_tri1_points, tex1_target)[0]
+    tri2_chamfer_loss =  chamfer_distance(pred_tri2_points, tex2_target)[0]
+    tri3_chamfer_loss =  chamfer_distance(pred_tri3_points, tex3_target)[0]
+    
+    # point-mesh loss
+    lv_pointclouds = Pointclouds(points=lv_target)
+    lv_point_mesh_dist_loss = point_mesh_face_distance(pred_lv_mesh, lv_pointclouds)
+
+
+    # Regularization loss
+    lv_edge_loss = mesh_edge_var_loss(pred_lv_mesh)
+    lv_laplacian_loss =  mesh_laplacian_smoothing(pred_lv_mesh)
+    lv_normal_consistency_loss = mesh_normal_consistency(pred_lv_mesh)
+    
+    
+    loss =  lda[0]*  (lv_point_mesh_dist_loss )\
+    + lda[1] * (lv_chamfer_loss )\
+    + lda[1] * (tri1_chamfer_loss+tri2_chamfer_loss+tri3_chamfer_loss)\
+    + lda[2] * (lv_edge_loss)\
+    + lda[3] * (lv_laplacian_loss)\
+    + lda[4] * (lv_normal_consistency_loss)\
+    + lda[0] * (tex1_point_mesh_dist_loss + tex2_point_mesh_dist_loss + tex3_point_mesh_dist_loss)\
+    
+    
+
+    log = {"loss": loss,
+        "point_mesh_dist_loss": lv_point_mesh_dist_loss.detach(),
+        "chamfer_loss": lv_chamfer_loss.detach()+lv_chamfer_loss.detach(),
+        "tri_point_mesh_dist_loss": tex1_point_mesh_dist_loss.detach()+tex2_point_mesh_dist_loss.detach()+tex3_point_mesh_dist_loss.detach(),
+        "tri_chamfer_loss": tri1_chamfer_loss.detach()+tri2_chamfer_loss.detach()+tri3_chamfer_loss.detach(),
+        "edge_loss": lv_edge_loss.detach(),
+        "laplacian_loss": lv_laplacian_loss.detach(),
+        "normal_consistency_loss": lv_normal_consistency_loss.detach()
+        }
+    
+    return loss, log
+
+
+def lv_hippo_tex_criterion2(verts, lv_target, hippo_target,tex1_target, tex2_target, tex3_target, lv_tri, hippo_tri, tri1, tri2, tri3, lda=[3,0.5,1500,5,1,1,1]):
+    loss=0.0
+
+    # cf loss
+    pred_lv_mesh = Meshes(verts=list(verts), faces=list(lv_tri))
+    pred_lv_points = sample_points_from_meshes(pred_lv_mesh, lv_target.shape[1])
+    lv_chamfer_loss =  chamfer_distance(pred_lv_points, lv_target)[0]
+    pred_hippo_mesh = Meshes(verts=list(verts), faces=list(hippo_tri)) 
+    pred_hippo_points = sample_points_from_meshes(pred_hippo_mesh, hippo_target.shape[1])
+    hippo_chamfer_loss =  chamfer_distance(pred_hippo_points, hippo_target)[0]
+    
+    pred_tri1_mesh = Meshes(verts=list(verts), faces=list(tri1))
+    pred_tri2_mesh = Meshes(verts=list(verts), faces=list(tri2))
+    pred_tri3_mesh = Meshes(verts=list(verts), faces=list(tri3))
+    
+    # tex1_pointclouds = Pointclouds(points=tex1_target)
+    # tex2_pointclouds = Pointclouds(points=tex2_target)
+    # tex3_pointclouds = Pointclouds(points=tex3_target)
+    # tex1_point_mesh_dist_loss = point_mesh_face_distance(pred_tri1_mesh, tex1_pointclouds)
+    # tex2_point_mesh_dist_loss = point_mesh_face_distance(pred_tri2_mesh, tex2_pointclouds)
+    # tex3_point_mesh_dist_loss = point_mesh_face_distance(pred_tri3_mesh, tex3_pointclouds)
+
+    pred_tri1_points = sample_points_from_meshes(pred_tri1_mesh, tex1_target.shape[1])
+    pred_tri2_points = sample_points_from_meshes(pred_tri2_mesh, tex2_target.shape[1])
+    pred_tri3_points = sample_points_from_meshes(pred_tri3_mesh, tex3_target.shape[1])
+    
+    tri1_chamfer_loss =  chamfer_distance(pred_tri1_points, tex1_target)[0]
+    tri2_chamfer_loss =  chamfer_distance(pred_tri2_points, tex2_target)[0]
+    tri3_chamfer_loss =  chamfer_distance(pred_tri3_points, tex3_target)[0]
+    
+    # point-mesh loss
+    lv_pointclouds = Pointclouds(points=lv_target)
+    lv_point_mesh_dist_loss = point_mesh_face_distance(pred_lv_mesh, lv_pointclouds)
+    hippo_pointclouds = Pointclouds(points=hippo_target)
+    hippo_point_mesh_dist_loss = point_mesh_face_distance(pred_hippo_mesh, hippo_pointclouds)
+
+    # Regularization loss
+    lv_edge_loss = mesh_edge_var_loss(pred_lv_mesh)
+    hippo_edge_loss = mesh_edge_var_loss(pred_hippo_mesh)
+    lv_laplacian_loss =  mesh_laplacian_smoothing(pred_lv_mesh, method="cotcurv")
+    hippo_laplacian_loss =  mesh_laplacian_smoothing(pred_hippo_mesh, method="cotcurv")
+    lv_normal_consistency_loss = mesh_normal_consistency(pred_lv_mesh)
+    hippo_normal_consistency_loss = mesh_normal_consistency(pred_hippo_mesh)
+    
+    
+    loss =  lda[0]*  (lv_point_mesh_dist_loss + hippo_point_mesh_dist_loss)\
+    + lda[1] * (lv_chamfer_loss + hippo_chamfer_loss)\
+    + lda[2] * (lv_edge_loss + hippo_edge_loss)\
+    + lda[3] * (lv_laplacian_loss+hippo_laplacian_loss)\
+    + lda[4] * (lv_normal_consistency_loss+hippo_normal_consistency_loss)\
+    + lda[1] * (tri1_chamfer_loss + tri2_chamfer_loss + tri3_chamfer_loss)/2 # tex loss
+
+    log = {"loss": loss,
+        "point_mesh_dist_loss": lv_point_mesh_dist_loss.detach()+ hippo_point_mesh_dist_loss.detach(),
+        "chamfer_loss": lv_chamfer_loss.detach()+lv_chamfer_loss.detach(),
+        "tri_loss": tri1_chamfer_loss.detach()+tri2_chamfer_loss.detach()+tri3_chamfer_loss.detach(),
         "edge_loss": lv_edge_loss.detach()+hippo_edge_loss.detach(),
         "laplacian_loss": lv_laplacian_loss.detach()+hippo_laplacian_loss.detach(),
         "normal_consistency_loss": lv_normal_consistency_loss.detach()+hippo_normal_consistency_loss.detach()
