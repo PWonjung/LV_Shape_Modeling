@@ -47,16 +47,14 @@ def parse_args():
     return parser.parse_args()
 
 def train_data(data_file, tag=None, id=None):
-    temp_data_file = "/root/LV/LV_Shape_Modeling/temp_meshes/cuttail_temp_L_tex1.pkl"
+    temp_data_file = "../temp_meshes/cuttail_temp_L_tex.pkl"
     
     with open(temp_data_file, "rb") as f:
         temp_data = pickle.load(f)
     with open(data_file, "rb") as f:
         data = pickle.load(f)
     print("@@@@@!!",id)
-    # print(glob.glob(f"/root/LV/LV_Shape_Modeling/ipynb/MICCAI-LV/results/aibl_normal_mid1/out/{id}/2000_*.npy"))
-    # scaler = np.load(glob.glob(f"/root/LV/LV_Shape_Modeling/ipynb/MICCAI-LV/results/aibl_normal_mid1/out/{id}/2000_*.npy")[0])
-    # print(scaler)
+ 
  
     # Convert vertices and faces to tensors and move to GPU
     vert = np.asarray(data['vert']).astype(np.float32)
@@ -123,8 +121,8 @@ def main(args):
     batch_size = args.batch_size
     print(args.sub_id,"!!!!!")
 
-    create_directory(f"/root/LV/LV_Shape_Modeling/ipynb/MICCAI-LV/results/{args.tag}/log/{args.sub_id}", True)
-    writer = SummaryWriter(log_dir=f"/root/LV/LV_Shape_Modeling/ipynb/MICCAI-LV/results/{args.tag}/log/{args.sub_id}")
+    create_directory(f"../optim_result/{args.tag}/log/{args.sub_id}", True)
+    writer = SummaryWriter(log_dir=f"../optim_result/{args.tag}/log/{args.sub_id}")
     
     '''MODEL LOADING'''
     model = PointNetOpt(num_classes=3, input_transform=False, feature_transform=False).to("cuda")
@@ -154,6 +152,7 @@ def main(args):
     # Optimization loop
     loss_min = 10000
     saved_vert = orig_vertices
+    lda = args.lda
     for epoch in tqdm(range(args.epoch)):
 
         optimizer.zero_grad()
@@ -166,7 +165,14 @@ def main(args):
         # Avoid inplace operations by creating new tensors
         verts = vertices.clone() + pred.transpose(2, 1).clone()
         l2_loss = loss_fn(orig_vertices, verts)
-        loss, log = lv_hippo_tex_criterion2(verts, lv_target, hippo_target,tex1_target, tex2_target, tex3_target, lv_tri, hippo_tri, tri1, tri2, tri3, args.lda)
+        if epoch == 1000: 
+            lda = [2, 2, 200, 10, 50, 1, 1]
+            print(f"lda changed into: {lda}")
+            
+        loss, log, lv_chamfer_loss = lv_hippo_tex_criterion2(verts, lv_target, hippo_target,tex1_target, tex2_target, tex3_target, lv_tri, hippo_tri, tri1, tri2, tri3, lda)
+        if epoch%1000 == 0 and epoch>=5000 and lv_chamfer_loss > 1:
+            args.epoch+=1000
+            print(lv_chamfer_loss) 
         loss += l2_loss * args.lda[-2]
         
         mid_lv_pred_mesh = Meshes(verts=list(verts), faces=list(lv_tri))
@@ -200,9 +206,9 @@ def main(args):
         writer.add_scalar("lr", optimizer.param_groups[0]['lr'], global_step=epoch)
         if epoch % 500 == 0 or epoch == args.epoch-1:
             verts_np = verts.detach().cpu().numpy()
-            create_directory(rf'/root/LV/LV_Shape_Modeling/ipynb/MICCAI-LV/results/{args.tag}/out/{args.sub_id}')
-            np.save(rf'/root/LV/LV_Shape_Modeling/ipynb/MICCAI-LV/results/{args.tag}/out/{args.sub_id}/{epoch}_{args.sub_id}_{loss}.npy', verts_np)
-    np.save(rf'/root/LV/LV_Shape_Modeling/ipynb/MICCAI-LV/results/{args.tag}/out/{args.sub_id}/smallest_{args.sub_id}_{loss_min}.npy', saved_vert.detach().cpu().numpy())
+            create_directory(rf'../optim_result/{args.tag}/out/{args.sub_id}')
+            np.save(rf'../optim_result/{args.tag}/out/{args.sub_id}/{epoch}_{args.sub_id}_{loss}.npy', verts_np)
+    np.save(rf'../optim_result/{args.tag}/out/{args.sub_id}/smallest_{args.sub_id}_{loss_min}.npy', saved_vert.detach().cpu().numpy())
     print('End of training...')
     return
 

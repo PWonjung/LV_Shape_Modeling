@@ -37,7 +37,7 @@ def parse_args():
     parser = argparse.ArgumentParser('training')
     parser.add_argument('--gpu', type=str, default='0', help='specify gpu device')
     parser.add_argument('--batch_size', type=int, default=1, help='batch size in training')
-    parser.add_argument('--epoch', default=2001, type=int, help='number of epoch in training')
+    parser.add_argument('--epoch', default=1001, type=int, help='number of epoch in training')
     parser.add_argument('--learning_rate', default=1e-5, type=float, help='learning rate in training')
     parser.add_argument('--num_point', type=int, default=1024, help='Point Number')
     parser.add_argument('--data_path', type=str, default='../data/LV_left/train_data.pickle', help='data path to optimize')
@@ -48,7 +48,7 @@ def parse_args():
     return parser.parse_args()
 
 def train_data(data_file, tag=None, id=None):
-    temp_data_file = "/root/LV/LV_Shape_Modeling/temp_meshes/cuttail_temp_L_tex.pkl"
+    temp_data_file = "../temp_meshes/cuttail_temp_L_tex.pkl"
     
     with open(temp_data_file, "rb") as f:
         temp_data = pickle.load(f)
@@ -56,9 +56,7 @@ def train_data(data_file, tag=None, id=None):
     with open(data_file, "rb") as f:
         data = pickle.load(f)
     print("@@@@@!!",id)
-    # print(glob.glob(f"/root/LV/lv-parametric-modelling/ipynb/MICCAI-LV/results/mid_TRS/out/{id}/2000_*.npy"))
-    # scaler = np.load(glob.glob(f"/root/LV/lv-parametric-modelling/ipynb/MICCAI-LV/results/mid_TRS/out/{id}/2000_*.npy")[0])
-    # print(scaler)
+
  
     # Convert vertices and faces to tensors and move to GPU
     vert = np.asarray(temp_data['cuttail_vert']).astype(np.float32)
@@ -90,7 +88,7 @@ def train_data(data_file, tag=None, id=None):
     lv_pred_mesh = Meshes(verts=list(vertices), faces=list(lv_tri))
     hippo_pred_mesh = Meshes(verts=list(vertices), faces=list(hippo_tri))   
 
-    return vertices, lv_tri, hippo_tri,  lv_target,hippo_target,lv_pred_mesh,hippo_pred_mesh
+    return vertices, lv_tri, hippo_tri, lv_target,hippo_target, lv_pred_mesh, hippo_pred_mesh
 def create_directory(directory_path, log=False):
     if not os.path.exists(directory_path):
         # Create target Directory
@@ -108,13 +106,12 @@ def main(args):
     batch_size = args.batch_size
     print(args.sub_id,"!!!!!")
 
-    create_directory(f"/root/LV/LV_Shape_Modeling/ipynb/MICCAI-LV/results/{args.tag}/log/{args.sub_id}", True)
-    writer = SummaryWriter(log_dir=f"/root/LV/LV_Shape_Modeling/ipynb/MICCAI-LV/results/{args.tag}/log/{args.sub_id}")
+    create_directory(f"../optim_result/{args.tag}/log/{args.sub_id}", True)
+    writer = SummaryWriter(log_dir=f"../optim_result/{args.tag}/log/{args.sub_id}")
     
     '''MODEL LOADING'''
     
-
-    
+   
     # data preparation
     vertices, lv_tri, hippo_tri, lv_target,hippo_target,lv_pred_mesh,hippo_pred_mesh = train_data(args.data_path, args.tag, args.sub_id)
     # Convert vertices and faces to tensors and move to GPU
@@ -190,8 +187,8 @@ def main(args):
 
         writer.add_scalar("lr", optimizer.param_groups[0]['lr'], global_step=epoch)
         if epoch % 1000 == 0 or epoch == args.epoch-1:
-            create_directory(rf'/root/LV/LV_Shape_Modeling/ipynb/MICCAI-LV/results/{args.tag}/out/{args.sub_id}')
-            np.save(rf'/root/LV/LV_Shape_Modeling/ipynb/MICCAI-LV/results/{args.tag}/out/{args.sub_id}/{epoch}_{args.sub_id}_{loss}.npy', saved.detach().cpu().numpy())
+            create_directory(rf'../optim_result/{args.tag}/out/{args.sub_id}')
+            np.save(rf'../optim_result/{args.tag}/out/{args.sub_id}/{epoch}_{args.sub_id}_{min}.npy', saved.detach().cpu().numpy())
             # verts_np = verts.detach().cpu().numpy()
             # np.save(rf'/root/LV/lv-parametric-modelling/ipynb/MICCAI-LV/results/{args.tag}/out/{args.sub_id}/{epoch}_{args.sub_id}_{loss}.npy', verts_np)
 

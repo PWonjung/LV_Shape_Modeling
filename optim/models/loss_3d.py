@@ -1,5 +1,4 @@
 import torch
-
 def mesh_edge_var_loss(meshes, target_length: float = 0.0):
     """
     Computes mesh edge length regularization loss averaged across all meshes
